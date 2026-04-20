@@ -17,7 +17,7 @@ args = parser.parse_args()
 BIN_FILE = args.file
 
 if not os.path.exists(BIN_FILE):
-    raise Exception(f"Filen finns inte: {BIN_FILE}")
+    raise Exception(f"File not found: {BIN_FILE}")
 
 
 # =========================
@@ -26,7 +26,7 @@ if not os.path.exists(BIN_FILE):
 def pick_reader():
     all_readers = readers()
     if not all_readers:
-        raise Exception("Ingen reader hittades")
+        raise Exception("No reader found")
 
     for r in all_readers:
         if "(1)" in str(r):
@@ -54,7 +54,7 @@ def connect_to_tag(reader, timeout_seconds=60):
             last_error = e
             sleep(0.5)
 
-    raise Exception(f"Ingen tagg hittades: {last_error}")
+    raise Exception(f"No tag was found: {last_error}")
 
 
 # =========================
@@ -65,7 +65,7 @@ def get_uid(connection):
     data, sw1, sw2 = connection.transmit(cmd)
 
     if (sw1, sw2) != (0x90, 0x00):
-        raise Exception(f"Kunde inte läsa UID: {sw1:02X} {sw2:02X}")
+        raise Exception(f"Could not read UID: {sw1:02X} {sw2:02X}")
 
     print("UID:", " ".join(f"{b:02X}" for b in data))
     return data
@@ -123,7 +123,7 @@ def main():
     print(f"Will write blocks {START_BLOCK}..{last_block}")
 
     if last_block > 78:
-        raise Exception("Filen är för stor för SLIX2")
+        raise Exception("File is to big for SLIX2")
 
     # WRITE
     print("Writing...")
