@@ -1,11 +1,28 @@
 from time import sleep
+import argparse
+import os
 from smartcard.System import readers
 
-BIN_FILE = "ADD-North_PETG_Black-2.bin"
 BLOCK_SIZE = 4
 START_BLOCK = 0
 
 
+# =========================
+# Argument
+# =========================
+parser = argparse.ArgumentParser(description="Write BIN to NFC tag (SLIX2)")
+parser.add_argument("-f", "--file", required=True, help="Path to .bin file")
+
+args = parser.parse_args()
+BIN_FILE = args.file
+
+if not os.path.exists(BIN_FILE):
+    raise Exception(f"Filen finns inte: {BIN_FILE}")
+
+
+# =========================
+# Reader
+# =========================
 def pick_reader():
     all_readers = readers()
     if not all_readers:
@@ -18,6 +35,9 @@ def pick_reader():
     return all_readers[0]
 
 
+# =========================
+# Connect
+# =========================
 def connect_to_tag(reader, timeout_seconds=60):
     print("Using reader:", reader)
     print("Waiting for tag...")
@@ -34,9 +54,12 @@ def connect_to_tag(reader, timeout_seconds=60):
             last_error = e
             sleep(0.5)
 
-    raise Exception(f"Ingen tagg hittades eller kunde anslutas: {last_error}")
+    raise Exception(f"Ingen tagg hittades: {last_error}")
 
 
+# =========================
+# UID
+# =========================
 def get_uid(connection):
     cmd = [0xFF, 0xCA, 0x00, 0x00, 0x00]
     data, sw1, sw2 = connection.transmit(cmd)
@@ -48,11 +71,12 @@ def get_uid(connection):
     return data
 
 
+# =========================
+# Read
+# =========================
 def read_block(connection, block):
     cmd = [0xFF, 0xFB, 0x00, 0x00, 0x02, 0x20, block]
     resp, sw1, sw2 = connection.transmit(cmd)
-
-    print(f"READ block {block}: {sw1:02X} {sw2:02X}")
 
     if (sw1, sw2) != (0x90, 0x00):
         raise Exception(f"Read failed block {block}: {sw1:02X} {sw2:02X}")
@@ -60,6 +84,9 @@ def read_block(connection, block):
     return list(resp)
 
 
+# =========================
+# Write
+# =========================
 def write_block(connection, block, data):
     data = list(data)
 
@@ -75,6 +102,9 @@ def write_block(connection, block, data):
         raise Exception(f"Write failed block {block}: {sw1:02X} {sw2:02X}")
 
 
+# =========================
+# Main
+# =========================
 def main():
     reader = pick_reader()
     connection = connect_to_tag(reader)
@@ -82,7 +112,9 @@ def main():
     with open(BIN_FILE, "rb") as f:
         bin_data = list(f.read())
 
+    print(f"File: {BIN_FILE}")
     print(f"BIN size: {len(bin_data)} bytes")
+
     get_uid(connection)
 
     total_blocks = (len(bin_data) + BLOCK_SIZE - 1) // BLOCK_SIZE
@@ -91,19 +123,18 @@ def main():
     print(f"Will write blocks {START_BLOCK}..{last_block}")
 
     if last_block > 78:
-        raise Exception(
-            f"Filen får inte plats. Sista skrivbara block på SLIX2 är 78, "
-            f"men skriptet behöver gå till block {last_block}."
-        )
+        raise Exception("Filen är för stor för SLIX2")
 
+    # WRITE
     print("Writing...")
     for i in range(total_blocks):
         block = START_BLOCK + i
         chunk = bin_data[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
         write_block(connection, block, chunk)
 
-    print(f"Wrote {total_blocks} blocks starting at block {START_BLOCK}")
+    print("Write complete")
 
+    # VERIFY
     print("Verifying...")
     read_back = []
 
@@ -118,14 +149,6 @@ def main():
         print("✅ Verification OK")
     else:
         print("❌ Verification FAILED")
-        for i in range(len(bin_data)):
-            if bin_data[i] != read_back[i]:
-                print(
-                    f"Mismatch at byte {i}: expected {bin_data[i]:02X}, got {read_back[i]:02X}"
-                )
-                break
-
-    print("Done!")
 
 
 if __name__ == "__main__":
